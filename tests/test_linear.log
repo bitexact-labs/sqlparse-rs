@@ -1,0 +1,7 @@
+spaces: 1M chars in 0.05s
+string: 1M chars in 0.01s
+comment: 1M chars in 0.04s
+unterminated: 1M chars in 0.24s
+dollar: 1M chars in 0.01s
+words: 1M chars in 0.14s
+ok

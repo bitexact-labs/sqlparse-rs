@@ -1,0 +1,49 @@
+name: CI
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  verify:
+    # the generated tables must match sqlparse, sqlparse's own tests must pass, fuzzing must find no difference
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install maturin pytest "sqlparse==0.6.1"
+      - name: tables are up to date (generated with Python 3.14)
+        if: matrix.python == '3.14'
+        run: python -I gen/gen_tables.py > /tmp/gen.rs && diff <(grep -v -e '^// @generated' -e PYTHON_VERSION /tmp/gen.rs) <(grep -v -e '^// @generated' -e PYTHON_VERSION src/gen.rs)
+      - run: pip install -e . -v
+      - run: cd tests && PYTHONPATH=. python -m pytest -q -p no:cacheprovider -p upstream_conftest_rs upstream
+      - run: python tests/test_linear.py
+      - run: python tests/fuzz_vs_orig.py 1 5000 && python tests/fuzz_vs_orig.py 2 5000 chaos
+
+  wheels:
+    needs: verify
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist --find-interpreter
+          manylinux: auto
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist
